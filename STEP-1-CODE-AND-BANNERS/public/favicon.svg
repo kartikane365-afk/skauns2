@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#0a0a0a"/>
+  <!-- Stylized Architectural SKAUNS 'S' -->
+  <path d="M44 18H23a5 5 0 0 0-5 5v5a5 5 0 0 0 5 5h18a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H20" 
+        fill="none" 
+        stroke="#ffffff" 
+        stroke-width="7" 
+        stroke-linecap="square" 
+        stroke-linejoin="miter"/>
+  <!-- Technical micro accents -->
+  <circle cx="44" cy="18" r="2" fill="#ffffff"/>
+  <circle cx="20" cy="46" r="2" fill="#ffffff"/>
+</svg>
