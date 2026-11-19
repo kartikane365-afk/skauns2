@@ -44,6 +44,7 @@ export default function Admin() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<AdminTab>('products');
   const [toast, setToast] = useState<string | null>(null);
+  const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -1454,27 +1455,26 @@ export default function Admin() {
                             <span className="text-[11px] font-bold text-black uppercase tracking-wider flex items-center gap-1.5">
                               <span>📸</span> Attached Payment Screenshot / UPI UTR Proof:
                             </span>
-                            <a
-                              href={ord.paymentScreenshot}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => setViewingScreenshot(ord.paymentScreenshot || null)}
                               className="text-[10px] text-blue-600 hover:underline uppercase font-bold"
                             >
-                              Open Full Size ↗
-                            </a>
+                              Enlarge Full Screen ↗
+                            </button>
                           </div>
-                          <a
-                            href={ord.paymentScreenshot}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block max-w-sm"
+                          <button
+                            type="button"
+                            onClick={() => setViewingScreenshot(ord.paymentScreenshot || null)}
+                            className="inline-block max-w-sm text-left group"
                           >
                             <img
                               src={ord.paymentScreenshot}
                               alt={`Payment Proof for ${ord.orderId}`}
-                              className="max-h-80 w-auto rounded border border-black/20 object-contain hover:opacity-95 shadow-sm transition-opacity"
+                              className="max-h-80 w-auto rounded border border-black/20 object-contain group-hover:opacity-90 shadow-sm transition-opacity cursor-zoom-in"
                             />
-                          </a>
+                            <span className="text-[10px] text-dark/40 block mt-1">Click image to enlarge full screen</span>
+                          </button>
                         </div>
                       ) : (
                         <div className="text-[10px] text-dark/45 italic bg-black/5 p-2.5">
@@ -1554,6 +1554,37 @@ export default function Admin() {
           </div>
         )}
       </div>
+
+      {/* Enlarged Screenshot Lightbox Modal */}
+      {viewingScreenshot && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm"
+          onClick={() => setViewingScreenshot(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[92vh] bg-white p-4 border-2 border-black shadow-2xl flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex justify-between items-center pb-2 mb-3 border-b border-black/15">
+              <span className="font-mono text-xs font-bold uppercase tracking-wider text-black">
+                📸 Payment Proof Screenshot / UPI UTR
+              </span>
+              <button
+                type="button"
+                onClick={() => setViewingScreenshot(null)}
+                className="bg-black text-white px-3 py-1 text-xs font-bold uppercase hover:bg-black/80 transition-colors"
+              >
+                ✕ Close
+              </button>
+            </div>
+            <img
+              src={viewingScreenshot}
+              alt="Enlarged Payment Proof"
+              className="max-h-[75vh] w-auto object-contain border border-black/10"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

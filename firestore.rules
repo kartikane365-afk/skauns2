@@ -384,7 +384,7 @@ service cloud.firestore {
                'paymentMode', 'subtotal', 'discount', 'discountCode',
                'totalOrderValue', 'amountPaidNow', 'balanceOnDelivery',
                'transactionId', 'accountInfo', 'shippingDetails',
-               'timestamp', 'isoTimestamp', 'status'
+               'timestamp', 'isoTimestamp', 'status', 'paymentScreenshot'
              ]) &&
              hasRequiredFields([
                'orderId', 'orderCode', 'orderManifestCode', 'userId', 'items',
@@ -411,6 +411,7 @@ service cloud.firestore {
              isValidShippingDetails(data.shippingDetails) &&
              isValidString(data.timestamp, 1, 100) &&
              isValidDateString(data.isoTimestamp) &&
+             (!('paymentScreenshot' in data) || isValidString(data.paymentScreenshot, 10, 600000)) &&
              data.status in ['Pending Verification', 'Verified & Dispatched', 'Delivered', 'Cancelled'];
     }
 

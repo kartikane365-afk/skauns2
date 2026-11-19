@@ -657,12 +657,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ...order,
       userId: order.accountInfo?.userId || user?.id || 'guest',
       status: 'Pending Verification',
+      paymentScreenshot: order.paymentScreenshot,
     };
     const next = [record, ...orders];
     persistLocal(DB_KEYS.orders, next, setOrders);
 
     if (isFirebaseConfigured && firebaseDb) {
-      void setDoc(doc(firebaseDb, FS_COLS.orders, record.orderId), stripUndefined({ ...record }));
+      const payload = stripUndefined({ ...record });
+      setDoc(doc(firebaseDb, FS_COLS.orders, record.orderId), payload)
+        .then(() => {
+          console.log('[SKAUNS] Order successfully written to Cloud Firestore:', record.orderId);
+        })
+        .catch(async (err) => {
+          console.warn('[SKAUNS] Firestore order write failed, retrying without screenshot:', err);
+          if (record.paymentScreenshot) {
+            const { paymentScreenshot, ...fallbackPayload } = record;
+            await setDoc(doc(firebaseDb!, FS_COLS.orders, record.orderId), stripUndefined(fallbackPayload))
+              .then(() => console.log('[SKAUNS] Fallback order written without screenshot'))
+              .catch((e) => console.error('[SKAUNS] All Firestore order writes failed:', e));
+          }
+        });
     }
     return record;
   };

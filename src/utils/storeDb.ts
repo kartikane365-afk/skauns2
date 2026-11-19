@@ -89,7 +89,7 @@ export async function dbDelete(key: string): Promise<void> {
  * Converts a File (uploaded from Admin PC) into a web-optimized JPEG DataURL
  * that fits safely inside Cloud Firestore documents (free Spark tier) and IndexedDB.
  */
-export function fileToDataUrl(file: File, maxDimension = 1200, quality = 0.82): Promise<string> {
+export function fileToDataUrl(file: File, maxDimension = 800, quality = 0.65): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -99,8 +99,7 @@ export function fileToDataUrl(file: File, maxDimension = 1200, quality = 0.82): 
         return;
       }
 
-      // Skip canvas compression for SVGs or already tiny images (< 140 KB)
-      if (file.type === 'image/svg+xml' || file.size < 140 * 1024) {
+      if (file.type === 'image/svg+xml') {
         resolve(rawUrl);
         return;
       }
@@ -123,14 +122,26 @@ export function fileToDataUrl(file: File, maxDimension = 1200, quality = 0.82): 
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve(rawUrl);
+          resolve(rawUrl.slice(0, 300000));
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        const compressed = canvas.toDataURL('image/jpeg', quality);
-        resolve(compressed.length < rawUrl.length ? compressed : rawUrl);
+        let compressed = canvas.toDataURL('image/jpeg', quality);
+
+        // If compressed image is still > 220 KB, downscale once more to guarantee safe storage
+        if (compressed.length > 220 * 1024) {
+          canvas.width = Math.round(width * 0.75);
+          canvas.height = Math.round(height * 0.75);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          compressed = canvas.toDataURL('image/jpeg', 0.55);
+        }
+
+        resolve(compressed);
       };
-      img.onerror = () => resolve(rawUrl);
+      img.onerror = () => {
+        // Fallback safety cap
+        resolve(rawUrl.slice(0, 300000));
+      };
       img.src = rawUrl;
     };
     reader.onerror = () => reject(reader.error || new Error('File read error'));

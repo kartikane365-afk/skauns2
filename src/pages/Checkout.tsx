@@ -43,6 +43,7 @@ export default function Checkout() {
   const [transactionId, setTransactionId] = useState('');
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [screenshotLoading, setScreenshotLoading] = useState(false);
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [copiedManifest, setCopiedManifest] = useState(false);
   
@@ -107,11 +108,14 @@ export default function Checkout() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setScreenshotFile(file);
+      setScreenshotLoading(true);
       try {
-        const compressed = await fileToDataUrl(file, 900, 0.75);
+        const compressed = await fileToDataUrl(file, 800, 0.65);
         setScreenshotPreview(compressed);
       } catch {
         setScreenshotPreview(URL.createObjectURL(file));
+      } finally {
+        setScreenshotLoading(false);
       }
     }
   };
@@ -989,10 +993,18 @@ export default function Checkout() {
                     onChange={handleScreenshotChange}
                     className="block w-full text-xs text-dark/60 file:mr-4 file:py-2 file:px-4 file:border-0 file:text-xs file:font-mono file:font-bold file:bg-black file:text-white hover:file:bg-black/80 cursor-pointer"
                   />
-                  {screenshotPreview && (
-                    <div className="mt-2 flex items-center gap-3">
-                      <img src={screenshotPreview} alt="Screenshot Preview" className="w-16 h-16 object-cover border border-black/20" />
-                      <span className="text-[10px] text-emerald-700 font-bold">✓ Screenshot attached ({screenshotFile?.name})</span>
+                  {screenshotLoading && (
+                    <div className="mt-2 text-[10px] text-amber-700 font-bold flex items-center gap-1.5 animate-pulse">
+                      <span>⏳</span> Compressing and optimizing screenshot for fast cloud upload...
+                    </div>
+                  )}
+                  {screenshotPreview && !screenshotLoading && (
+                    <div className="mt-2 flex items-center gap-3 bg-emerald-50 border border-emerald-300 p-2">
+                      <img src={screenshotPreview} alt="Screenshot Preview" className="w-14 h-14 object-cover border border-emerald-400" />
+                      <div>
+                        <span className="text-[11px] text-emerald-800 font-bold block">✓ Screenshot ready for verification</span>
+                        <span className="text-[10px] text-emerald-600 block">{screenshotFile?.name} ({Math.round(screenshotPreview.length / 1024)} KB)</span>
+                      </div>
                     </div>
                   )}
                 </div>
