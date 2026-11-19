@@ -52,6 +52,7 @@ export interface OrderDispatchData {
   };
   timestamp: string;
   isoTimestamp: string;
+  paymentScreenshot?: string;
 }
 
 /**

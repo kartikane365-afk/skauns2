@@ -1447,6 +1447,40 @@ export default function Admin() {
                       <pre className="bg-black text-[#f4f4f0] p-4 text-[10px] sm:text-[11px] overflow-x-auto leading-relaxed whitespace-pre-wrap">
                         {ord.orderManifestCode}
                       </pre>
+
+                      {ord.paymentScreenshot ? (
+                        <div className="border border-black/20 p-4 bg-[#fafafa] space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-black uppercase tracking-wider flex items-center gap-1.5">
+                              <span>📸</span> Attached Payment Screenshot / UPI UTR Proof:
+                            </span>
+                            <a
+                              href={ord.paymentScreenshot}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-blue-600 hover:underline uppercase font-bold"
+                            >
+                              Open Full Size ↗
+                            </a>
+                          </div>
+                          <a
+                            href={ord.paymentScreenshot}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block max-w-sm"
+                          >
+                            <img
+                              src={ord.paymentScreenshot}
+                              alt={`Payment Proof for ${ord.orderId}`}
+                              className="max-h-80 w-auto rounded border border-black/20 object-contain hover:opacity-95 shadow-sm transition-opacity"
+                            />
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-dark/45 italic bg-black/5 p-2.5">
+                          ℹ️ No payment screenshot was attached by customer for this order (refer to UTR transaction ID above).
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

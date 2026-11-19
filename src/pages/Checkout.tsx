@@ -4,6 +4,7 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../context/StoreContext';
 import { formatPrice } from '../data/products';
+import { fileToDataUrl } from '../utils/storeDb';
 import {
   buildOrderVerificationCode,
   dispatchOrderConfirmationToAdmin,
@@ -102,11 +103,16 @@ export default function Checkout() {
     setTimeout(() => setCopiedUpi(false), 2500);
   };
 
-  const handleScreenshotChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScreenshotChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setScreenshotFile(file);
-      setScreenshotPreview(URL.createObjectURL(file));
+      try {
+        const compressed = await fileToDataUrl(file, 900, 0.75);
+        setScreenshotPreview(compressed);
+      } catch {
+        setScreenshotPreview(URL.createObjectURL(file));
+      }
     }
   };
 
@@ -195,6 +201,7 @@ export default function Checkout() {
         shippingDetails: { ...formData },
         timestamp,
         isoTimestamp,
+        paymentScreenshot: screenshotPreview || undefined,
       };
 
       // Persist order to store (visible in Customer Account & Master Admin Dashboard)
@@ -266,6 +273,19 @@ export default function Checkout() {
                 {confirmedOrder.orderManifestCode}
               </pre>
             </div>
+
+            {confirmedOrder.paymentScreenshot && (
+              <div className="mb-6 border border-black/15 p-4 bg-[#fafafa] font-mono text-xs">
+                <span className="text-[10px] uppercase tracking-wider text-dark/60 block mb-2 font-bold">
+                  ✓ Attached Payment Proof:
+                </span>
+                <img
+                  src={confirmedOrder.paymentScreenshot}
+                  alt="Payment Proof"
+                  className="max-h-56 w-auto rounded border border-black/20 object-contain shadow-sm"
+                />
+              </div>
+            )}
 
             {/* Breakdown card */}
             <div className="space-y-4 font-mono text-xs mb-8">
