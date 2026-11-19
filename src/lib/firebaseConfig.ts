@@ -1,23 +1,12 @@
 /**
  * SKAUNS Firebase Project Configuration
- *
- * OPTION A (Recommended for Vercel/Netlify):
- *   Add these 6 Environment Variables in Vercel / Netlify settings:
- *     VITE_FIREBASE_API_KEY
- *     VITE_FIREBASE_AUTH_DOMAIN
- *     VITE_FIREBASE_PROJECT_ID
- *     VITE_FIREBASE_STORAGE_BUCKET
- *     VITE_FIREBASE_MESSAGING_SENDER_ID
- *     VITE_FIREBASE_APP_ID
- *
- * OPTION B (Direct paste):
- *   Paste your Firebase Web App config values below (from Firebase Console → Project Settings → Your Apps).
+ * Project: kartikane-c134c
  */
 export const directFirebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyBs8AM9nv6KTci5M0TRvYceVP1Z5gAr1lI',
+  authDomain: 'kartikane-c134c.firebaseapp.com',
+  projectId: 'kartikane-c134c',
+  storageBucket: 'kartikane-c134c.firebasestorage.app',
+  messagingSenderId: '50061999243',
+  appId: '1:50061999243:web:9a6a2c3cf351cc9b62288e',
 };
