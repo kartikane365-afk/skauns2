@@ -392,6 +392,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(profile);
         return { success: true, message: 'Authenticated successfully.', user: profile };
       } catch (err) {
+        const errCode = (err as { code?: string })?.code || '';
+        // If master admin tries logging in before registering in Firebase, auto-provision
+        if (
+          cleanEmail === MASTER_ADMIN_EMAIL &&
+          (errCode === 'auth/user-not-found' || errCode === 'auth/invalid-credential' || errCode === 'auth/invalid-login-credentials')
+        ) {
+          try {
+            const cred = await createUserWithEmailAndPassword(firebaseAuth, cleanEmail, password);
+            await fbUpdateProfile(cred.user, { displayName: 'Kartikane Parihar' });
+            const profile: AuthUser = {
+              id: cred.user.uid,
+              fullName: 'Kartikane Parihar',
+              email: cleanEmail,
+              phone: '9871044291',
+              role: 'admin',
+              createdAt: new Date().toISOString(),
+            };
+            try {
+              await setDoc(doc(firebaseDb, 'users', cred.user.uid), {
+                fullName: profile.fullName,
+                email: profile.email,
+                phone: profile.phone,
+                role: profile.role,
+                createdAt: profile.createdAt,
+              });
+            } catch {
+              // Ignore doc write error
+            }
+            setUser(profile);
+            return { success: true, message: 'Master Admin account activated and logged in.', user: profile };
+          } catch (createErr) {
+            const createErrCode = (createErr as { code?: string })?.code || '';
+            if (createErrCode === 'auth/email-already-in-use') {
+              return { success: false, message: 'Incorrect password for master admin account. Please check your password.' };
+            }
+            return { success: false, message: mapFirebaseError(createErr) };
+          }
+        }
         return { success: false, message: mapFirebaseError(err) };
       }
     }
