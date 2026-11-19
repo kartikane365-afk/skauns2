@@ -1,0 +1,530 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model — SKAUNS Storefront & Master Admin CMS
+// ===============================================================
+//
+// This security rules file assumes the following Firestore collections:
+//
+// 1. Collection: store_products
+//    Document ID: {productId} (matches field `id`)
+//    Access: Public read (storefront catalog); Master Admin write/delete
+//    Fields:
+//      - id: string (required, immutable, 1..120 chars, == productId)
+//      - name: string (required, 1..200 chars)
+//      - price: int | float (required, 0..10000000)
+//      - image: string (required, 1..950000 chars, relative path / http(s) / data:image/)
+//      - images: list<string> (required, 1..20 items, valid image source)
+//      - description: string (required, 1..5000 chars)
+//      - category: string (required, 1..100 chars)
+//      - sizes: list<string> (required, 1..20 items)
+//      - color: string (required, 1..100 chars)
+//      - tag: string (optional, 0..100 chars)
+//      - orderIndex: int | float (optional, 0..100000)
+//
+// 2. Collection: store_categories
+//    Document ID: {categoryId} (matches field `id`)
+//    Access: Public read (storefront catalog); Master Admin write/delete
+//    Fields:
+//      - id: string (required, immutable, 1..80 chars, == categoryId)
+//      - name: string (required, 1..120 chars)
+//      - navLabel: string (required, 0..100 chars)
+//      - subtitle: string (required, 0..200 chars)
+//      - sectionSubtitle: string (required, 0..200 chars)
+//      - watermark: string (required, 0..100 chars)
+//      - gsm: string (required, 0..60 chars)
+//      - defaultPrice: int | float (required, 0..10000000)
+//      - orderIndex: int | float (optional, 0..100000)
+//
+// 3. Collection: store_banners
+//    Document ID: {bannerId} (matches field `id`)
+//    Access: Public read (storefront catalog); Master Admin write/delete
+//    Fields:
+//      - id: string (required, immutable, 1..100 chars, == bannerId)
+//      - categoryId: string (required, 1..80 chars)
+//      - title: string (required, 1..120 chars)
+//      - categoryName: string (required, 0..120 chars)
+//      - gsm: string (required, 0..60 chars)
+//      - coolLine: string (required, 0..500 chars)
+//      - image: string (required, 1..950000 chars, valid image source)
+//      - objectPosition: string (required, 0..100 chars)
+//      - orderIndex: int | float (optional, 0..100000)
+//
+// 4. Collection: store_hero_slides
+//    Document ID: {slideId} (matches field `id`)
+//    Access: Public read (storefront catalog); Master Admin write/delete
+//    Fields:
+//      - id: string (required, immutable, 1..100 chars, == slideId)
+//      - image: string (required, 1..950000 chars, valid image source)
+//      - alt: string (required, 0..200 chars)
+//      - objectPosition: string (required, 0..100 chars)
+//      - watermark: string (required, 0..100 chars)
+//      - category: string (required, 0..120 chars)
+//      - tagline: string (required, 0..200 chars)
+//      - theme: string (required, 'dark' | 'light')
+//      - headlineLine1: string (required, 1..100 chars)
+//      - headlineLine2: string (required, 0..100 chars)
+//      - headlineStyle: string (optional, 'boxy' | 'armor' | 'avant')
+//      - ctaText: string (required, 0..80 chars)
+//      - ctaLink: string (required, 0..300 chars, safe path or http(s) URL)
+//      - badgeTitle: string (required, 0..120 chars)
+//      - badgeSubtitle: string (required, 0..120 chars)
+//      - label: string (required, 0..80 chars)
+//      - orderIndex: int | float (optional, 0..100000)
+//
+// 5. Collection: users (CONTAINS PII — strictly restricted)
+//    Document ID: {userId} (Firebase Auth UID)
+//    Access: Owner or Master Admin read; Owner create ('customer') / update ('fullName', 'phone' only); Master Admin full write/delete
+//    Fields:
+//      - id: string (optional, immutable, == userId)
+//      - fullName: string (required, 1..120 chars)
+//      - email: string (required, immutable for owner, valid email, <= 254 chars)
+//      - phone: string (required, 0..20 chars)
+//      - role: string (required, immutable for owner, 'customer' | 'admin')
+//      - createdAt: timestamp | ISO-8601 string (required, immutable)
+//
+// 6. Collection: store_orders (CONTAINS PII — strictly restricted)
+//    Document ID: {orderId}
+//    Access: Customer creates own order ('Pending Verification') and reads only own orders (`where('userId', '==', uid)`);
+//            Customers cannot update or delete; Master Admin can read, update, and delete any order.
+//    Fields:
+//      - orderId: string (required, immutable, 1..80 chars)
+//      - orderCode: string (required, 1..120 chars)
+//      - orderManifestCode: string (required, 1..10000 chars)
+//      - userId: string (required, immutable, == auth.uid on create, 1..128 chars)
+//      - items: list<map> (required, 1..50 items)
+//      - paymentMode: string (required, 'prepaid' | 'cod')
+//      - subtotal: int | float (optional, 0..10000000)
+//      - discount: int | float (optional, 0..10000000)
+//      - discountCode: string (optional, 0..60 chars)
+//      - totalOrderValue: int | float (required, 0..10000000)
+//      - amountPaidNow: int | float (required, 0..10000000)
+//      - balanceOnDelivery: int | float (required, 0..10000000)
+//      - transactionId: string (required, 4..100 chars)
+//      - accountInfo: map (optional; keys: userId, registeredName, registeredEmail, registeredPhone)
+//      - shippingDetails: map (required; keys: fullName, phone, email, address, city, state, pincode)
+//      - timestamp: string (required, 1..100 chars)
+//      - isoTimestamp: string (required, immutable, ISO-8601 string <= 40 chars)
+//      - status: string (required, 'Pending Verification' | 'Verified & Dispatched' | 'Delivered' | 'Cancelled')
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the request comes from an authenticated Firebase Auth user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user is the Master Admin (derived solely from Auth token email)
+    function isAdmin() {
+      return isAuthenticated() &&
+             'email' in request.auth.token &&
+             request.auth.token.email is string &&
+             request.auth.token.email.lower() == 'kartikane365@gmail.com';
+    }
+
+    // Check if the authenticated user owns the document keyed by userId
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if the authenticated user owns an existing document via its userId field
+    function isDocOwner() {
+      return isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Verify userId matches authenticated caller on create
+    function uidUnchanged() {
+      return 'userId' in request.resource.data &&
+             request.resource.data.userId == request.auth.uid;
+    }
+
+    // Verify userId is not modified on update
+    function uidNotModified() {
+      return !('userId' in request.resource.data) ||
+             request.resource.data.userId == resource.data.userId;
+    }
+
+    // Validate required fields exist on the incoming document
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that the incoming document contains only explicitly allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate that specified immutable fields have not changed during an update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Validate string type and length bounds
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    // Validate non-negative number (int or float) within safe upper bound
+    function isNonNegativeNumber(val, maxVal) {
+      return (val is int || val is float) && val >= 0 && val <= maxVal;
+    }
+
+    // Validate email address format and length
+    function isValidEmail(email) {
+      return email is string &&
+             email.size() >= 5 &&
+             email.size() <= 254 &&
+             email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Validate ISO 8601 date string format (YYYY-MM-DDTHH:MM:SS...)
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+             dateStr.size() >= 19 &&
+             dateStr.size() <= 40 &&
+             dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // Validate createdAt accepts either Firestore timestamp or ISO 8601 string
+    function isValidCreatedAt(val) {
+      return (val is timestamp && val <= request.time) || isValidDateString(val);
+    }
+
+    // Validate image source (relative public asset path, http(s) URL, or uploaded base64 data:image/)
+    function isValidImageSource(src) {
+      return src is string &&
+             src.size() >= 1 &&
+             src.size() <= 950000 &&
+             src.matches("^(/|https://|http://|data:image/).*");
+    }
+
+    // Validate CTA / navigation link (empty, relative route, or http(s) URL; blocks javascript: XSS)
+    function isValidLink(link) {
+      return link is string &&
+             link.size() <= 300 &&
+             (link.size() == 0 || link.matches("^(/|https://|http://).*"));
+    }
+
+    // Validate optional orderIndex field
+    function isValidOptionalOrderIndex(data) {
+      return !('orderIndex' in data) || isNonNegativeNumber(data.orderIndex, 100000);
+    }
+
+    // ===============================================================
+    // Domain Validators (Invoked on BOTH create and update)
+    // ===============================================================
+
+    function isValidProduct(data, productId) {
+      return hasOnlyAllowedFields([
+               'id', 'name', 'price', 'image', 'images', 'description',
+               'category', 'sizes', 'color', 'tag', 'orderIndex'
+             ]) &&
+             hasRequiredFields([
+               'id', 'name', 'price', 'image', 'images', 'description',
+               'category', 'sizes', 'color'
+             ]) &&
+             isValidString(data.id, 1, 120) &&
+             data.id == productId &&
+             isValidString(data.name, 1, 200) &&
+             isNonNegativeNumber(data.price, 10000000) &&
+             isValidImageSource(data.image) &&
+             data.images is list &&
+             data.images.size() >= 1 &&
+             data.images.size() <= 20 &&
+             isValidImageSource(data.images[0]) &&
+             isValidString(data.description, 1, 5000) &&
+             isValidString(data.category, 1, 100) &&
+             data.sizes is list &&
+             data.sizes.size() >= 1 &&
+             data.sizes.size() <= 20 &&
+             isValidString(data.sizes[0], 1, 30) &&
+             isValidString(data.color, 1, 100) &&
+             (!('tag' in data) || isValidString(data.tag, 0, 100)) &&
+             isValidOptionalOrderIndex(data);
+    }
+
+    function isValidCategory(data, categoryId) {
+      return hasOnlyAllowedFields([
+               'id', 'name', 'navLabel', 'subtitle', 'sectionSubtitle',
+               'watermark', 'gsm', 'defaultPrice', 'orderIndex'
+             ]) &&
+             hasRequiredFields([
+               'id', 'name', 'navLabel', 'subtitle', 'sectionSubtitle',
+               'watermark', 'gsm', 'defaultPrice'
+             ]) &&
+             isValidString(data.id, 1, 80) &&
+             data.id == categoryId &&
+             isValidString(data.name, 1, 120) &&
+             isValidString(data.navLabel, 0, 100) &&
+             isValidString(data.subtitle, 0, 200) &&
+             isValidString(data.sectionSubtitle, 0, 200) &&
+             isValidString(data.watermark, 0, 100) &&
+             isValidString(data.gsm, 0, 60) &&
+             isNonNegativeNumber(data.defaultPrice, 10000000) &&
+             isValidOptionalOrderIndex(data);
+    }
+
+    function isValidBanner(data, bannerId) {
+      return hasOnlyAllowedFields([
+               'id', 'categoryId', 'title', 'categoryName', 'gsm',
+               'coolLine', 'image', 'objectPosition', 'orderIndex'
+             ]) &&
+             hasRequiredFields([
+               'id', 'categoryId', 'title', 'categoryName', 'gsm',
+               'coolLine', 'image', 'objectPosition'
+             ]) &&
+             isValidString(data.id, 1, 100) &&
+             data.id == bannerId &&
+             isValidString(data.categoryId, 1, 80) &&
+             isValidString(data.title, 1, 120) &&
+             isValidString(data.categoryName, 0, 120) &&
+             isValidString(data.gsm, 0, 60) &&
+             isValidString(data.coolLine, 0, 500) &&
+             isValidImageSource(data.image) &&
+             isValidString(data.objectPosition, 0, 100) &&
+             isValidOptionalOrderIndex(data);
+    }
+
+    function isValidHeroSlide(data, slideId) {
+      return hasOnlyAllowedFields([
+               'id', 'image', 'alt', 'objectPosition', 'watermark',
+               'category', 'tagline', 'theme', 'headlineLine1', 'headlineLine2',
+               'headlineStyle', 'ctaText', 'ctaLink', 'badgeTitle',
+               'badgeSubtitle', 'label', 'orderIndex'
+             ]) &&
+             hasRequiredFields([
+               'id', 'image', 'alt', 'objectPosition', 'watermark',
+               'category', 'tagline', 'theme', 'headlineLine1', 'headlineLine2',
+               'ctaText', 'ctaLink', 'badgeTitle', 'badgeSubtitle', 'label'
+             ]) &&
+             isValidString(data.id, 1, 100) &&
+             data.id == slideId &&
+             isValidImageSource(data.image) &&
+             isValidString(data.alt, 0, 200) &&
+             isValidString(data.objectPosition, 0, 100) &&
+             isValidString(data.watermark, 0, 100) &&
+             isValidString(data.category, 0, 120) &&
+             isValidString(data.tagline, 0, 200) &&
+             data.theme in ['dark', 'light'] &&
+             isValidString(data.headlineLine1, 1, 100) &&
+             isValidString(data.headlineLine2, 0, 100) &&
+             (!('headlineStyle' in data) || data.headlineStyle in ['boxy', 'armor', 'avant']) &&
+             isValidString(data.ctaText, 0, 80) &&
+             isValidLink(data.ctaLink) &&
+             isValidString(data.badgeTitle, 0, 120) &&
+             isValidString(data.badgeSubtitle, 0, 120) &&
+             isValidString(data.label, 0, 80) &&
+             isValidOptionalOrderIndex(data);
+    }
+
+    function isValidUser(data, userId) {
+      return hasOnlyAllowedFields(['id', 'fullName', 'email', 'phone', 'role', 'createdAt']) &&
+             hasRequiredFields(['fullName', 'email', 'phone', 'role', 'createdAt']) &&
+             (!('id' in data) || (isValidString(data.id, 1, 128) && data.id == userId)) &&
+             isValidString(data.fullName, 1, 120) &&
+             isValidEmail(data.email) &&
+             isValidString(data.phone, 0, 20) &&
+             data.role in ['customer', 'admin'] &&
+             isValidCreatedAt(data.createdAt);
+    }
+
+    function isValidShippingDetails(shipping) {
+      return shipping is map &&
+             shipping.keys().hasOnly(['fullName', 'phone', 'email', 'address', 'city', 'state', 'pincode']) &&
+             shipping.keys().hasAll(['fullName', 'phone', 'email', 'address', 'city', 'state', 'pincode']) &&
+             isValidString(shipping.fullName, 1, 120) &&
+             isValidString(shipping.phone, 7, 20) &&
+             isValidEmail(shipping.email) &&
+             isValidString(shipping.address, 1, 500) &&
+             isValidString(shipping.city, 1, 100) &&
+             isValidString(shipping.state, 1, 100) &&
+             isValidString(shipping.pincode, 4, 12);
+    }
+
+    function isValidAccountInfo(info, expectedUserId) {
+      return info is map &&
+             info.keys().hasOnly(['userId', 'registeredName', 'registeredEmail', 'registeredPhone']) &&
+             info.keys().hasAll(['userId', 'registeredName', 'registeredEmail', 'registeredPhone']) &&
+             isValidString(info.userId, 1, 128) &&
+             info.userId == expectedUserId &&
+             isValidString(info.registeredName, 1, 120) &&
+             isValidEmail(info.registeredEmail) &&
+             isValidString(info.registeredPhone, 0, 20);
+    }
+
+    function isValidOrderItem(item) {
+      return item is map &&
+             item.keys().hasOnly(['product', 'size', 'quantity']) &&
+             item.keys().hasAll(['product', 'size', 'quantity']) &&
+             item.product is map &&
+             item.product.keys().hasOnly([
+               'id', 'name', 'price', 'image', 'images', 'description',
+               'category', 'sizes', 'color', 'tag', 'orderIndex'
+             ]) &&
+             item.product.keys().hasAll(['id', 'name', 'price']) &&
+             isValidString(item.product.id, 1, 120) &&
+             isValidString(item.product.name, 1, 200) &&
+             isNonNegativeNumber(item.product.price, 10000000) &&
+             isValidString(item.size, 1, 30) &&
+             (item.quantity is int || item.quantity is float) &&
+             item.quantity >= 1 &&
+             item.quantity <= 100;
+    }
+
+    function isValidOrder(data) {
+      return hasOnlyAllowedFields([
+               'orderId', 'orderCode', 'orderManifestCode', 'userId', 'items',
+               'paymentMode', 'subtotal', 'discount', 'discountCode',
+               'totalOrderValue', 'amountPaidNow', 'balanceOnDelivery',
+               'transactionId', 'accountInfo', 'shippingDetails',
+               'timestamp', 'isoTimestamp', 'status'
+             ]) &&
+             hasRequiredFields([
+               'orderId', 'orderCode', 'orderManifestCode', 'userId', 'items',
+               'paymentMode', 'totalOrderValue', 'amountPaidNow', 'balanceOnDelivery',
+               'transactionId', 'shippingDetails', 'timestamp', 'isoTimestamp', 'status'
+             ]) &&
+             isValidString(data.orderId, 1, 80) &&
+             isValidString(data.orderCode, 1, 120) &&
+             isValidString(data.orderManifestCode, 1, 10000) &&
+             isValidString(data.userId, 1, 128) &&
+             data.items is list &&
+             data.items.size() >= 1 &&
+             data.items.size() <= 50 &&
+             isValidOrderItem(data.items[0]) &&
+             data.paymentMode in ['prepaid', 'cod'] &&
+             (!('subtotal' in data) || isNonNegativeNumber(data.subtotal, 10000000)) &&
+             (!('discount' in data) || isNonNegativeNumber(data.discount, 10000000)) &&
+             (!('discountCode' in data) || isValidString(data.discountCode, 0, 60)) &&
+             isNonNegativeNumber(data.totalOrderValue, 10000000) &&
+             isNonNegativeNumber(data.amountPaidNow, 10000000) &&
+             isNonNegativeNumber(data.balanceOnDelivery, 10000000) &&
+             isValidString(data.transactionId, 4, 100) &&
+             (!('accountInfo' in data) || isValidAccountInfo(data.accountInfo, data.userId)) &&
+             isValidShippingDetails(data.shippingDetails) &&
+             isValidString(data.timestamp, 1, 100) &&
+             isValidDateString(data.isoTimestamp) &&
+             data.status in ['Pending Verification', 'Verified & Dispatched', 'Delivered', 'Cancelled'];
+    }
+
+    // ===============================================================
+    // Public Storefront Catalog Rules (Public Read, Admin Write Only)
+    // ===============================================================
+
+    match /store_products/{productId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidProduct(request.resource.data, productId);
+      allow update: if isAdmin() &&
+                       isValidProduct(request.resource.data, productId) &&
+                       areImmutableFieldsUnchanged(['id']);
+      allow delete: if isAdmin();
+    }
+
+    match /store_categories/{categoryId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidCategory(request.resource.data, categoryId);
+      allow update: if isAdmin() &&
+                       isValidCategory(request.resource.data, categoryId) &&
+                       areImmutableFieldsUnchanged(['id']);
+      allow delete: if isAdmin();
+    }
+
+    match /store_banners/{bannerId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidBanner(request.resource.data, bannerId);
+      allow update: if isAdmin() &&
+                       isValidBanner(request.resource.data, bannerId) &&
+                       areImmutableFieldsUnchanged(['id']);
+      allow delete: if isAdmin();
+    }
+
+    match /store_hero_slides/{slideId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidHeroSlide(request.resource.data, slideId);
+      allow update: if isAdmin() &&
+                       isValidHeroSlide(request.resource.data, slideId) &&
+                       areImmutableFieldsUnchanged(['id']);
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // User Profile Rules (/users/{userId}) — Strictly PII Protected
+    // ===============================================================
+
+    match /users/{userId} {
+      // Only the profile owner or Master Admin can read user PII
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Owner can create their own customer profile (email must match Auth token);
+      // Master Admin can create their own admin profile or provision user docs
+      allow create: if isValidUser(request.resource.data, userId) && (
+        (
+          isOwner(userId) &&
+          request.resource.data.role == 'customer' &&
+          'email' in request.auth.token &&
+          request.auth.token.email is string &&
+          request.resource.data.email.lower() == request.auth.token.email.lower()
+        ) ||
+        isAdmin()
+      );
+
+      // Owner can ONLY update `fullName` and `phone` (role, email, createdAt, id are strictly locked);
+      // Master Admin can update any valid user doc while preserving createdAt and id
+      allow update: if isValidUser(request.resource.data, userId) && (
+        (
+          isOwner(userId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'phone']) &&
+          areImmutableFieldsUnchanged(['id', 'role', 'email', 'createdAt']) &&
+          request.resource.data.role == resource.data.role
+        ) ||
+        (
+          isAdmin() &&
+          areImmutableFieldsUnchanged(['id', 'createdAt'])
+        )
+      );
+
+      // Only Master Admin can delete user profiles
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // Order Rules (/store_orders/{orderId}) — Strictly PII Protected
+    // ===============================================================
+
+    match /store_orders/{orderId} {
+      // Master Admin can read all orders; customers can read/query ONLY their own orders
+      allow read: if isAdmin() || isDocOwner();
+
+      // Authenticated users can create an order ONLY for themselves with initial status 'Pending Verification'
+      allow create: if isAuthenticated() &&
+                       uidUnchanged() &&
+                       request.resource.data.status == 'Pending Verification' &&
+                       isValidOrder(request.resource.data);
+
+      // Customers cannot update orders after creation; Master Admin can update (e.g., status)
+      // while preserving core order identity, ownership, and timestamp fields
+      allow update: if isAdmin() &&
+                       isValidOrder(request.resource.data) &&
+                       uidNotModified() &&
+                       areImmutableFieldsUnchanged(['orderId', 'userId', 'isoTimestamp']);
+
+      // Customers cannot delete orders; only Master Admin can delete
+      allow delete: if isAdmin();
+    }
+
+    // ===============================================================
+    // Default Deny All Other Paths
+    // ===============================================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
