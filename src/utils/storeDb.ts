@@ -87,10 +87,11 @@ export async function dbDelete(key: string): Promise<void> {
 
 /**
  * High-definition image converter for Admin CMS:
- * Preserves ultra-high resolution (up to 2400px), 92% high fidelity, and vibrant colors
- * for product catalog photos, landing hero slides, and category banners.
+ * Preserves crisp 2K resolution (up to 2000px) with 88% high fidelity and vibrant colors
+ * for product catalog photos, landing hero slides, and category banners,
+ * safely calibrated so products with multiple gallery photos easily fit within Cloud Firestore limits.
  */
-export function fileToDataUrl(file: File, maxDimension = 2400, quality = 0.92): Promise<string> {
+export function fileToDataUrl(file: File, maxDimension = 2000, quality = 0.88): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
