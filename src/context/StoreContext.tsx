@@ -291,7 +291,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             const list = snap.docs
               .map((d) => d.data() as Product & { orderIndex?: number })
               .sort((a, b) => (a.orderIndex ?? 9999) - (b.orderIndex ?? 9999));
-            setProducts(list);
+
+            // Merge code products from GitHub with any live cloud overrides
+            const map = new Map<string, Product>();
+            defaultProducts.forEach((p) => map.set(p.id, p));
+            list.forEach((p) => {
+              const existing = map.get(p.id);
+              map.set(p.id, existing ? { ...existing, ...p } : p);
+            });
+            setProducts(Array.from(map.values()));
           }
           setIsHydrated(true);
         },
@@ -370,13 +378,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         dbGet<OrderRecord[]>(DB_KEYS.orders),
       ]);
       if (!active) return;
-      if (savedProducts && Array.isArray(savedProducts)) {
-        const migrated = savedProducts.map((p) => ({
-          ...p,
-          image: p.image.replace(/\.jfif$/i, '.jpeg'),
-          images: (p.images || []).map((img) => img.replace(/\.jfif$/i, '.jpeg')),
-        }));
-        setProducts(migrated);
+      if (savedProducts && Array.isArray(savedProducts) && savedProducts.length > 0) {
+        const map = new Map<string, Product>();
+        defaultProducts.forEach((p) => map.set(p.id, p));
+        savedProducts.forEach((p) => {
+          const migrated = {
+            ...p,
+            image: p.image.replace(/\.jfif$/i, '.jpeg'),
+            images: (p.images || []).map((img) => img.replace(/\.jfif$/i, '.jpeg')),
+          };
+          const existing = map.get(p.id);
+          map.set(p.id, existing ? { ...existing, ...migrated } : migrated);
+        });
+        setProducts(Array.from(map.values()));
+      } else {
+        setProducts(defaultProducts);
       }
       if (savedCategories && Array.isArray(savedCategories) && savedCategories.length > 0) setCategories(savedCategories);
       if (savedBanners && Array.isArray(savedBanners)) setSectionBanners(savedBanners);
