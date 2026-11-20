@@ -4,7 +4,7 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useStore } from '../context/StoreContext';
 import { formatPrice } from '../data/products';
-import { fileToDataUrl } from '../utils/storeDb';
+import { compressPaymentScreenshot } from '../utils/storeDb';
 import {
   buildOrderVerificationCode,
   dispatchOrderConfirmationToAdmin,
@@ -110,7 +110,7 @@ export default function Checkout() {
       setScreenshotFile(file);
       setScreenshotLoading(true);
       try {
-        const compressed = await fileToDataUrl(file, 800, 0.65);
+        const compressed = await compressPaymentScreenshot(file, 800, 0.65);
         setScreenshotPreview(compressed);
       } catch {
         setScreenshotPreview(URL.createObjectURL(file));

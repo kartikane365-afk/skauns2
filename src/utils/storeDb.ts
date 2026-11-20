@@ -86,10 +86,11 @@ export async function dbDelete(key: string): Promise<void> {
 }
 
 /**
- * Converts a File (uploaded from Admin PC) into a web-optimized JPEG DataURL
- * that fits safely inside Cloud Firestore documents (free Spark tier) and IndexedDB.
+ * High-definition image converter for Admin CMS:
+ * Preserves ultra-high resolution (up to 2400px), 92% high fidelity, and vibrant colors
+ * for product catalog photos, landing hero slides, and category banners.
  */
-export function fileToDataUrl(file: File, maxDimension = 800, quality = 0.65): Promise<string> {
+export function fileToDataUrl(file: File, maxDimension = 2400, quality = 0.92): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -99,8 +100,64 @@ export function fileToDataUrl(file: File, maxDimension = 800, quality = 0.65): P
         return;
       }
 
+      // Preserve vector SVGs exactly as-is
       if (file.type === 'image/svg+xml') {
         resolve(rawUrl);
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        // Only scale down if image exceeds ultra-HD 2400px bounds
+        if (width > maxDimension || height > maxDimension) {
+          if (width >= height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { alpha: true });
+        if (!ctx) {
+          resolve(rawUrl);
+          return;
+        }
+
+        // Use high-quality image smoothing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Keep PNG transparency if original is PNG, otherwise high-quality JPEG
+        const outputMime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        const finalUrl = outputMime === 'image/png' ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', quality);
+        resolve(finalUrl);
+      };
+      img.onerror = () => resolve(rawUrl);
+      img.src = rawUrl;
+    };
+    reader.onerror = () => reject(reader.error || new Error('File read error'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Dedicated lightweight compression strictly for customer payment proof screenshots:
+ * Compresses receipt images down to ~30-50KB so they fit inside Cloud Firestore order documents.
+ */
+export function compressPaymentScreenshot(file: File, maxDimension = 800, quality = 0.65): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rawUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!rawUrl) {
+        reject(new Error('Failed to read image file'));
         return;
       }
 
@@ -128,7 +185,6 @@ export function fileToDataUrl(file: File, maxDimension = 800, quality = 0.65): P
         ctx.drawImage(img, 0, 0, width, height);
         let compressed = canvas.toDataURL('image/jpeg', quality);
 
-        // If compressed image is still > 220 KB, downscale once more to guarantee safe storage
         if (compressed.length > 220 * 1024) {
           canvas.width = Math.round(width * 0.75);
           canvas.height = Math.round(height * 0.75);
@@ -138,10 +194,7 @@ export function fileToDataUrl(file: File, maxDimension = 800, quality = 0.65): P
 
         resolve(compressed);
       };
-      img.onerror = () => {
-        // Fallback safety cap
-        resolve(rawUrl.slice(0, 300000));
-      };
+      img.onerror = () => resolve(rawUrl.slice(0, 300000));
       img.src = rawUrl;
     };
     reader.onerror = () => reject(reader.error || new Error('File read error'));
