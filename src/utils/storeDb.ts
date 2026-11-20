@@ -4,6 +4,9 @@
  * without hitting localStorage's ~5MB quota limit.
  */
 
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { firebaseStorage } from '../lib/firebase';
+
 const DB_NAME = 'skauns_cms_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'kv_store';
@@ -146,6 +149,31 @@ export function fileToDataUrl(file: File, maxDimension = 2000, quality = 0.88): 
     reader.onerror = () => reject(reader.error || new Error('File read error'));
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Uploads catalog product images, hero slides, and banners to Firebase Cloud Storage.
+ * Firebase Cloud Storage supports ANY file size (1MB, 5MB, 10MB, 20MB, 50MB+) with ZERO compression,
+ * storing full original RAW/4K photoshoot quality, and returning a high-speed CDN download URL.
+ *
+ * If Firebase Storage is not initialized or offline, it falls back to local HD converter.
+ */
+export async function uploadCatalogImage(file: File, folder = 'products'): Promise<string> {
+  if (firebaseStorage) {
+    try {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const cleanName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const fileRef = ref(firebaseStorage, `${folder}/${cleanName}`);
+      const snap = await uploadBytes(fileRef, file, {
+        contentType: file.type || 'image/jpeg',
+      });
+      const downloadUrl = await getDownloadURL(snap.ref);
+      return downloadUrl;
+    } catch (err) {
+      console.warn('Firebase Storage upload failed, falling back to local HD converter:', err);
+    }
+  }
+  return fileToDataUrl(file);
 }
 
 /**

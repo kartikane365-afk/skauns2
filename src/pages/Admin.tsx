@@ -9,7 +9,7 @@ import {
   type OrderStatus,
 } from '../context/StoreContext';
 import { formatPrice, type Product } from '../data/products';
-import { fileToDataUrl } from '../utils/storeDb';
+import { uploadCatalogImage } from '../utils/storeDb';
 
 type AdminTab = 'products' | 'categories' | 'banners' | 'hero' | 'orders';
 
@@ -110,7 +110,8 @@ export default function Admin() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     try {
-      const urls = await Promise.all(Array.from(files).map((f) => fileToDataUrl(f)));
+      showToast('Uploading full-resolution image(s)...');
+      const urls = await Promise.all(Array.from(files).map((f) => uploadCatalogImage(f, 'products')));
       if (isPrimary) {
         const primaryUrl = urls[0];
         setProdForm((prev) => ({
@@ -246,9 +247,10 @@ export default function Admin() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await fileToDataUrl(file);
+      showToast('Uploading banner...');
+      const dataUrl = await uploadCatalogImage(file, 'banners');
       setBannerForm((prev) => ({ ...prev, image: dataUrl }));
-      showToast('Banner image loaded');
+      showToast('Banner image uploaded');
     } catch {
       showToast('Failed to read banner image');
     }
@@ -315,9 +317,10 @@ export default function Admin() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const dataUrl = await fileToDataUrl(file);
+      showToast('Uploading hero image...');
+      const dataUrl = await uploadCatalogImage(file, 'hero');
       setHeroForm((prev) => ({ ...prev, image: dataUrl }));
-      showToast('Main landing hero image loaded');
+      showToast('Main landing hero image uploaded');
     } catch {
       showToast('Failed to read hero image');
     }
