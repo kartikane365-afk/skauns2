@@ -71,8 +71,50 @@ export default function Admin() {
     extraImageUrl: '',
   });
 
+  const [activeSliderIdx, setActiveSliderIdx] = useState(0);
+
+  const currentSliderImg = prodForm.images[activeSliderIdx] || prodForm.images[0] || prodForm.image || '';
+
+  const moveProductImage = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= prodForm.images.length) return;
+    const next = [...prodForm.images];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setProdForm((prev) => ({
+      ...prev,
+      images: next,
+      image: next[0] || prev.image,
+    }));
+    setActiveSliderIdx(toIdx);
+  };
+
+  const makePrimaryImage = (idx: number) => {
+    if (idx === 0 || idx >= prodForm.images.length) return;
+    const next = [...prodForm.images];
+    const [chosen] = next.splice(idx, 1);
+    next.unshift(chosen);
+    setProdForm((prev) => ({
+      ...prev,
+      images: next,
+      image: next[0],
+    }));
+    setActiveSliderIdx(0);
+    showToast('Set as primary cover photo!');
+  };
+
+  const removeProductImage = (idx: number) => {
+    const next = prodForm.images.filter((_, i) => i !== idx);
+    setProdForm((prev) => ({
+      ...prev,
+      images: next,
+      image: next[0] || '',
+    }));
+    setActiveSliderIdx((prev) => Math.max(0, Math.min(prev, next.length - 1)));
+  };
+
   const openNewProductForm = () => {
     setEditingProductId(null);
+    setActiveSliderIdx(0);
     const defaultCat = categories[0];
     setProdForm({
       name: '',
@@ -94,6 +136,7 @@ export default function Admin() {
 
   const openEditProductForm = (p: Product) => {
     setEditingProductId(p.id);
+    setActiveSliderIdx(0);
     setProdForm({
       name: p.name,
       price: String(p.price),
@@ -769,34 +812,192 @@ export default function Admin() {
                     </div>
                   </div>
 
-                  {/* Gallery Preview Strip */}
+                  {/* Interactive Slidable Gallery & Stage */}
                   {prodForm.images.length > 0 && (
-                    <div className="flex flex-wrap gap-3 pt-2">
-                      {prodForm.images.map((img, idx) => (
-                        <div key={`${img.slice(0, 40)}-${idx}`} className="relative w-20 h-24 border border-black/20 bg-white p-1">
-                          <img src={img} alt={`Angle ${idx + 1}`} className="w-full h-full object-contain" />
+                    <div className="border border-black/20 bg-white p-4 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 pb-2">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold uppercase text-[11px] tracking-wider">
+                            Interactive Angle Slider ({prodForm.images.length} Photos)
+                          </p>
+                          <span className="text-[10px] text-dark/60 font-mono">
+                            • Angle {activeSliderIdx + 1} of {prodForm.images.length}
+                          </span>
+                        </div>
+                        {activeSliderIdx === 0 ? (
+                          <span className="bg-black text-white text-[9px] uppercase px-2 py-0.5 font-bold tracking-widest">
+                            ★ Primary Cover Angle
+                          </span>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => {
-                              const next = prodForm.images.filter((_, i) => i !== idx);
-                              setProdForm((prev) => ({
-                                ...prev,
-                                images: next,
-                                image: prev.image === img ? next[0] || '' : prev.image,
-                              }));
-                            }}
-                            className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 text-white text-[10px] font-bold flex items-center justify-center"
-                            title="Remove photo"
+                            onClick={() => makePrimaryImage(activeSliderIdx)}
+                            className="bg-amber-500 hover:bg-amber-600 text-black text-[9px] uppercase font-bold px-2.5 py-1 tracking-wider transition-colors"
                           >
-                            ✕
+                            ★ Set as Cover Photo
                           </button>
-                          {idx === 0 && (
-                            <span className="absolute bottom-0 inset-x-0 bg-black text-white text-[8px] text-center uppercase">
-                              Main
-                            </span>
-                          )}
+                        )}
+                      </div>
+
+                      {/* Large Interactive Slide Stage */}
+                      <div className="relative w-full h-72 sm:h-80 bg-[#111] border border-black/10 flex items-center justify-center overflow-hidden group">
+                        {currentSliderImg ? (
+                          <img
+                            src={currentSliderImg}
+                            alt={`Angle ${activeSliderIdx + 1}`}
+                            className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-[1.02]"
+                          />
+                        ) : (
+                          <div className="text-white/40 text-xs font-mono">No Image Selected</div>
+                        )}
+
+                        {/* Slide Previous Arrow */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActiveSliderIdx((prev) => (prev > 0 ? prev - 1 : prodForm.images.length - 1))
+                          }
+                          className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-black/70 hover:bg-black text-white flex items-center justify-center font-bold text-lg border border-white/20 transition-all shadow-lg hover:scale-110 active:scale-95"
+                          title="Slide to Previous Photo"
+                        >
+                          ‹
+                        </button>
+
+                        {/* Slide Next Arrow */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActiveSliderIdx((prev) => (prev < prodForm.images.length - 1 ? prev + 1 : 0))
+                          }
+                          className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-black/70 hover:bg-black text-white flex items-center justify-center font-bold text-lg border border-white/20 transition-all shadow-lg hover:scale-110 active:scale-95"
+                          title="Slide to Next Photo"
+                        >
+                          ›
+                        </button>
+
+                        {/* Stage Bottom Floating Action Bar */}
+                        <div className="absolute bottom-2 inset-x-2 flex flex-wrap items-center justify-between gap-2 bg-black/80 backdrop-blur-sm text-white px-3 py-1.5 text-[10px] font-mono border border-white/10">
+                          <span className="truncate max-w-[200px] sm:max-w-[320px] opacity-75">
+                            {currentSliderImg}
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              disabled={activeSliderIdx === 0}
+                              onClick={() => moveProductImage(activeSliderIdx, activeSliderIdx - 1)}
+                              className="px-2 py-0.5 bg-white/20 hover:bg-white hover:text-black disabled:opacity-30 disabled:pointer-events-none uppercase font-bold"
+                              title="Slide Left (Swap with Previous)"
+                            >
+                              ← Slide Left
+                            </button>
+                            <button
+                              type="button"
+                              disabled={activeSliderIdx === prodForm.images.length - 1}
+                              onClick={() => moveProductImage(activeSliderIdx, activeSliderIdx + 1)}
+                              className="px-2 py-0.5 bg-white/20 hover:bg-white hover:text-black disabled:opacity-30 disabled:pointer-events-none uppercase font-bold"
+                              title="Slide Right (Swap with Next)"
+                            >
+                              Slide Right →
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeProductImage(activeSliderIdx)}
+                              className="px-2 py-0.5 bg-red-600/80 hover:bg-red-600 uppercase font-bold text-white"
+                              title="Delete this photo"
+                            >
+                              ✕ Remove
+                            </button>
+                          </div>
                         </div>
-                      ))}
+                      </div>
+
+                      {/* Horizontal Slideable Filmstrip */}
+                      <div>
+                        <div className="flex items-center justify-between text-[10px] text-dark/60 uppercase font-mono mb-1.5">
+                          <span>Click any angle to view or slide order:</span>
+                          <span className="text-[9px]">Use ← and → below each card to reorder</span>
+                        </div>
+                        <div
+                          id="gallery-filmstrip"
+                          className="flex gap-3 overflow-x-auto pb-2 pt-1 scroll-smooth"
+                        >
+                          {prodForm.images.map((img, idx) => (
+                            <div
+                              key={`${img.slice(0, 40)}-${idx}`}
+                              className={`relative flex-shrink-0 w-24 border-2 p-1 bg-white cursor-pointer transition-all ${
+                                idx === activeSliderIdx
+                                  ? 'border-black ring-2 ring-black/40 shadow-md scale-105'
+                                  : 'border-black/20 hover:border-black/60 opacity-80 hover:opacity-100'
+                              }`}
+                              onClick={() => setActiveSliderIdx(idx)}
+                            >
+                              {/* Thumbnail Image */}
+                              <div className="w-full h-24 bg-[#f4f4f4] flex items-center justify-center overflow-hidden mb-1">
+                                <img src={img} alt={`Angle ${idx + 1}`} className="w-full h-full object-contain" />
+                              </div>
+
+                              {/* Index & Status Badge */}
+                              <div className="flex items-center justify-between text-[8px] font-mono px-0.5 mb-1">
+                                <span className="font-bold">#{idx + 1}</span>
+                                {idx === 0 ? (
+                                  <span className="bg-black text-white px-1 uppercase font-bold">Main</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      makePrimaryImage(idx);
+                                    }}
+                                    className="text-amber-600 hover:underline uppercase font-bold"
+                                    title="Make this photo the primary cover image"
+                                  >
+                                    ★ Cover
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Card Reordering Arrows */}
+                              <div className="flex items-center justify-between border-t border-black/10 pt-1 text-[9px]">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveProductImage(idx, idx - 1);
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center border border-black/20 hover:bg-black hover:text-white disabled:opacity-20 disabled:pointer-events-none font-bold"
+                                  title="Slide earlier"
+                                >
+                                  ←
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeProductImage(idx);
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center text-red-600 hover:bg-red-600 hover:text-white font-bold"
+                                  title="Delete photo"
+                                >
+                                  ✕
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === prodForm.images.length - 1}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    moveProductImage(idx, idx + 1);
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center border border-black/20 hover:bg-black hover:text-white disabled:opacity-20 disabled:pointer-events-none font-bold"
+                                  title="Slide later"
+                                >
+                                  →
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
