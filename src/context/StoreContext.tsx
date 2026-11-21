@@ -209,7 +209,7 @@ interface StoreContextType {
   isCloudSynced: boolean;
 
   addProduct: (product: Omit<Product, 'id'> & { id?: string }) => Product;
-  updateProduct: (id: string, updates: Partial<Product>) => void;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<{ success: boolean; error?: string }>;
   deleteProduct: (id: string) => Promise<void>;
 
   addCategory: (cat: CategoryConfig) => void;
@@ -532,7 +532,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return newProduct;
   };
 
-  const updateProduct = (id: string, updates: Partial<Product>) => {
+  const updateProduct = async (
+    id: string,
+    updates: Partial<Product>
+  ): Promise<{ success: boolean; error?: string }> => {
     const next = products.map((p) => {
       if (p.id !== id) return p;
       const merged = { ...p, ...updates };
@@ -542,17 +545,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return merged;
     });
     persistLocal(DB_KEYS.products, next, setProducts);
+    void dbSet(DB_KEYS.products, next);
 
     if (isFirebaseConfigured && firebaseDb) {
-      if (!cloudHasDocs.current.products) {
-        void batchWriteCollection(FS_COLS.products, next);
-      } else {
+      try {
         const updated = next.find((p) => p.id === id);
         if (updated) {
-          void setDoc(doc(firebaseDb, FS_COLS.products, id), stripUndefined({ ...updated }), { merge: true });
+          await setDoc(doc(firebaseDb, FS_COLS.products, id), stripUndefined({ ...updated }), { merge: true });
         }
+        return { success: true };
+      } catch (err: unknown) {
+        const msg = (err as { message?: string })?.message || 'Failed to sync update to Cloud Firestore';
+        console.error('Error saving updated product to Firestore:', err);
+        return { success: false, error: msg };
       }
     }
+    return { success: true };
   };
 
   const deleteProduct = async (id: string) => {

@@ -14,7 +14,7 @@ import { uploadCatalogImage } from '../utils/storeDb';
 type AdminTab = 'products' | 'categories' | 'banners' | 'hero' | 'orders';
 
 export default function Admin() {
-  const { user, isAdmin, isCloudAuth, authLoading, logout, changePassword } = useAuth();
+  const { user, isAdmin, isCloudAuth, isFirebaseUserLoggedIn, authLoading, logout, changePassword } = useAuth();
   const {
     products,
     categories,
@@ -87,6 +87,9 @@ export default function Admin() {
       extraImageUrl: '',
     });
     setShowProductForm(true);
+    setTimeout(() => {
+      document.getElementById('product-edit-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
   };
 
   const openEditProductForm = (p: Product) => {
@@ -104,6 +107,9 @@ export default function Admin() {
       extraImageUrl: '',
     });
     setShowProductForm(true);
+    setTimeout(() => {
+      document.getElementById('product-edit-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
   };
 
   const handleProductFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, isPrimary: boolean) => {
@@ -136,7 +142,7 @@ export default function Admin() {
     e.target.value = '';
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const numericPrice = Math.max(0, Number(prodForm.price) || 0);
     const parsedSizes = prodForm.sizes
@@ -159,14 +165,22 @@ export default function Admin() {
     };
 
     if (editingProductId) {
-      updateProduct(editingProductId, payload);
-      showToast(`Updated product "${payload.name}"`);
+      showToast(`Saving changes for "${payload.name}"...`);
+      const res = await updateProduct(editingProductId, payload);
+      if (res.success) {
+        showToast(`Saved changes for "${payload.name}"!`);
+        setShowProductForm(false);
+        setEditingProductId(null);
+      } else {
+        showToast(`Error saving product: ${res.error || 'Check Firebase credentials'}`);
+      }
     } else {
+      showToast(`Adding new product "${payload.name}"...`);
       addProduct(payload);
-      showToast(`Added new product "${payload.name}"`);
+      showToast(`Added new product "${payload.name}"!`);
+      setShowProductForm(false);
+      setEditingProductId(null);
     }
-    setShowProductForm(false);
-    setEditingProductId(null);
   };
 
   // ──────────────────────────────────────────────────────────────
@@ -425,13 +439,15 @@ export default function Admin() {
               </p>
               <span
                 className={`font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 font-bold ${
-                  isCloudAuth && isCloudSynced
+                  isCloudAuth && isCloudSynced && isFirebaseUserLoggedIn
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
                 }`}
               >
-                {isCloudAuth && isCloudSynced
-                  ? '● FIREBASE CLOUD LIVE'
+                {isCloudAuth && isCloudSynced && isFirebaseUserLoggedIn
+                  ? '● FIREBASE CLOUD LIVE (AUTHENTICATED)'
+                  : isCloudAuth && !isFirebaseUserLoggedIn
+                  ? '⚠️ SIGN-IN NEEDED FOR CLOUD WRITES'
                   : '○ LOCAL MODE (ADD FIREBASE KEYS FOR GLOBAL SYNC)'}
               </span>
             </div>
@@ -463,6 +479,27 @@ export default function Admin() {
             </button>
           </div>
         </div>
+
+        {/* Cloud Authentication Warning Banner */}
+        {isCloudAuth && !isFirebaseUserLoggedIn && (
+          <div className="bg-amber-500 text-black p-4 mb-8 font-mono text-xs border-2 border-black flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚠️</span>
+              <div>
+                <p className="font-bold uppercase tracking-wider">Cloud Authentication Required for Live Edits</p>
+                <p className="text-[11px] text-black/80 mt-0.5">
+                  You are viewing Admin with cached credentials, but your active Firebase session has expired or is unlinked. To save edits or deletions to Cloud Firestore, please sign in.
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/login?redirect=/admin"
+              className="bg-black text-white px-4 py-2 text-xs uppercase font-bold tracking-widest text-center hover:bg-black/80 whitespace-nowrap"
+            >
+              Log In to Cloud →
+            </Link>
+          </div>
+        )}
 
         {/* Live Metric Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4 mb-8 font-mono">
@@ -553,16 +590,29 @@ export default function Admin() {
             {/* Add / Edit Product Drawer/Panel */}
             {showProductForm && (
               <form
+                id="product-edit-form"
                 onSubmit={handleSaveProduct}
-                className="bg-white border-2 border-black p-6 space-y-5 font-mono text-xs shadow-lg"
+                className={`bg-white border-2 p-6 space-y-5 font-mono text-xs shadow-xl transition-all ${
+                  editingProductId ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-black'
+                }`}
               >
                 <div className="flex items-center justify-between border-b border-black/10 pb-3">
-                  <h2 className="font-syne font-black text-xl uppercase !mb-0">
-                    {editingProductId ? `Edit Product: ${editingProductId}` : 'Add New Product'}
-                  </h2>
+                  <div className="flex items-center gap-3">
+                    <h2 className="font-syne font-black text-xl uppercase !mb-0">
+                      {editingProductId ? `Edit Product: ${prodForm.name || editingProductId}` : 'Add New Product'}
+                    </h2>
+                    {editingProductId && (
+                      <span className="bg-amber-500 text-black text-[9px] font-bold px-2 py-0.5 uppercase tracking-widest">
+                        Editing Active ID: {editingProductId}
+                      </span>
+                    )}
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setShowProductForm(false)}
+                    onClick={() => {
+                      setShowProductForm(false);
+                      setEditingProductId(null);
+                    }}
                     className="border border-black/20 px-3 py-1 hover:bg-black hover:text-white font-bold"
                   >
                     ✕ Close

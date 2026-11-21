@@ -44,6 +44,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isAdmin: boolean;
   isCloudAuth: boolean;
+  isFirebaseUserLoggedIn: boolean;
   authLoading: boolean;
   register: (data: {
     fullName: string;
@@ -533,6 +534,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const isAdmin = Boolean(user && user.email.toLowerCase() === MASTER_ADMIN_EMAIL);
+  const isFirebaseUserLoggedIn = Boolean(firebaseAuth?.currentUser);
 
   return (
     <AuthContext.Provider
@@ -540,6 +542,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         isAdmin,
         isCloudAuth: isFirebaseConfigured,
+        isFirebaseUserLoggedIn,
         authLoading,
         register,
         login,
