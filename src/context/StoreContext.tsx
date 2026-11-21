@@ -210,7 +210,7 @@ interface StoreContextType {
 
   addProduct: (product: Omit<Product, 'id'> & { id?: string }) => Product;
   updateProduct: (id: string, updates: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  deleteProduct: (id: string) => Promise<void>;
 
   addCategory: (cat: CategoryConfig) => void;
   updateCategory: (id: string, updates: Partial<CategoryConfig>) => void;
@@ -251,6 +251,29 @@ const FS_COLS = {
   orders: 'store_orders',
 };
 
+const DELETED_PRODUCTS_KEY = 'skauns_deleted_products_v1';
+
+function getLocalDeletedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_PRODUCTS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {
+    // Ignore
+  }
+  return new Set();
+}
+
+function saveLocalDeletedIds(ids: Set<string>) {
+  try {
+    localStorage.setItem(DELETED_PRODUCTS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // Ignore
+  }
+}
+
 function stripUndefined<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
@@ -261,7 +284,10 @@ function stripUndefined<T extends Record<string, unknown>>(obj: T): Record<strin
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { user, isAdmin } = useAuth();
-  const [products, setProducts] = useState<Product[]>(defaultProducts);
+  const [products, setProducts] = useState<Product[]>(() => {
+    const deleted = getLocalDeletedIds();
+    return defaultProducts.filter((p) => !deleted.has(p.id));
+  });
   const [categories, setCategories] = useState<CategoryConfig[]>(DEFAULT_CATEGORIES);
   const [sectionBanners, setSectionBanners] = useState<SectionBannerConfig[]>(DEFAULT_SECTION_BANNERS);
   const [heroSlides, setHeroSlides] = useState<HeroSlideConfig[]>(DEFAULT_HERO_SLIDES);
@@ -283,21 +309,40 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const unsubProducts = onSnapshot(
         collection(db, FS_COLS.products),
         (snap) => {
+          const deletedIds = getLocalDeletedIds();
+
           if (snap.empty) {
             cloudHasDocs.current.products = false;
-            setProducts(defaultProducts);
+            setProducts(defaultProducts.filter((p) => !deletedIds.has(p.id)));
           } else {
             cloudHasDocs.current.products = true;
             const list = snap.docs
-              .map((d) => d.data() as Product & { orderIndex?: number })
+              .map((d) => d.data() as Product & { orderIndex?: number; tag?: string; isDeleted?: boolean })
               .sort((a, b) => (a.orderIndex ?? 9999) - (b.orderIndex ?? 9999));
+
+            // Any doc with tag === '__DELETED__' or isDeleted is a tombstone
+            list.forEach((p) => {
+              if (p.tag === '__DELETED__' || p.isDeleted) {
+                deletedIds.add(p.id);
+              }
+            });
+            saveLocalDeletedIds(deletedIds);
+
+            // Active cloud products
+            const activeCloud = list.filter((p) => p.tag !== '__DELETED__' && !p.isDeleted);
 
             // Merge code products from GitHub with any live cloud overrides
             const map = new Map<string, Product>();
-            defaultProducts.forEach((p) => map.set(p.id, p));
-            list.forEach((p) => {
-              const existing = map.get(p.id);
-              map.set(p.id, existing ? { ...existing, ...p } : p);
+            defaultProducts.forEach((p) => {
+              if (!deletedIds.has(p.id)) {
+                map.set(p.id, p);
+              }
+            });
+            activeCloud.forEach((p) => {
+              if (!deletedIds.has(p.id)) {
+                const existing = map.get(p.id);
+                map.set(p.id, existing ? { ...existing, ...p } : p);
+              }
             });
             setProducts(Array.from(map.values()));
           }
@@ -378,10 +423,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         dbGet<OrderRecord[]>(DB_KEYS.orders),
       ]);
       if (!active) return;
+      const deletedIds = getLocalDeletedIds();
       if (savedProducts && Array.isArray(savedProducts) && savedProducts.length > 0) {
         const map = new Map<string, Product>();
-        defaultProducts.forEach((p) => map.set(p.id, p));
+        defaultProducts.forEach((p) => {
+          if (!deletedIds.has(p.id)) map.set(p.id, p);
+        });
         savedProducts.forEach((p) => {
+          if (p.tag === '__DELETED__' || (p as { isDeleted?: boolean }).isDeleted) {
+            deletedIds.add(p.id);
+            return;
+          }
+          if (deletedIds.has(p.id)) return;
           const migrated = {
             ...p,
             image: p.image.replace(/\.jfif$/i, '.jpeg'),
@@ -390,9 +443,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           const existing = map.get(p.id);
           map.set(p.id, existing ? { ...existing, ...migrated } : migrated);
         });
+        saveLocalDeletedIds(deletedIds);
         setProducts(Array.from(map.values()));
       } else {
-        setProducts(defaultProducts);
+        setProducts(defaultProducts.filter((p) => !deletedIds.has(p.id)));
       }
       if (savedCategories && Array.isArray(savedCategories) && savedCategories.length > 0) setCategories(savedCategories);
       if (savedBanners && Array.isArray(savedBanners)) setSectionBanners(savedBanners);
@@ -501,15 +555,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const deleteProduct = (id: string) => {
+  const deleteProduct = async (id: string) => {
+    // 1. Immediately track as deleted locally to eliminate any UI flicker
+    const deletedIds = getLocalDeletedIds();
+    deletedIds.add(id);
+    saveLocalDeletedIds(deletedIds);
+
+    // 2. Filter out of state immediately
     const next = products.filter((p) => p.id !== id);
     persistLocal(DB_KEYS.products, next, setProducts);
 
+    // 3. Persist deletion to Cloud Firestore
     if (isFirebaseConfigured && firebaseDb) {
-      if (!cloudHasDocs.current.products) {
-        void batchWriteCollection(FS_COLS.products, next);
-      } else {
-        void deleteDoc(doc(firebaseDb, FS_COLS.products, id));
+      try {
+        const prodToDelete = products.find((p) => p.id === id) || defaultProducts.find((p) => p.id === id);
+        if (prodToDelete) {
+          // Write tombstone with tag: '__DELETED__' so cloud snapshot & code merge won't revive it
+          await setDoc(
+            doc(firebaseDb, FS_COLS.products, id),
+            stripUndefined({
+              ...prodToDelete,
+              tag: '__DELETED__',
+            }),
+            { merge: true }
+          );
+        } else {
+          await deleteDoc(doc(firebaseDb, FS_COLS.products, id));
+        }
+      } catch (err) {
+        console.error('Failed to sync product deletion to Firestore:', err);
       }
     }
   };
@@ -726,6 +800,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetStoreToDefaults = async () => {
+    try {
+      localStorage.removeItem(DELETED_PRODUCTS_KEY);
+    } catch {
+      // Ignore
+    }
     if (isFirebaseConfigured && firebaseDb) {
       await syncDefaultsToCloud();
     } else {

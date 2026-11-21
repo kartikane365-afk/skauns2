@@ -801,9 +801,9 @@ export default function Admin() {
                       Edit
                     </button>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (window.confirm(`Delete "${p.name}" from live catalog?`)) {
-                          deleteProduct(p.id);
+                          await deleteProduct(p.id);
                           showToast(`Deleted "${p.name}"`);
                         }
                       }}

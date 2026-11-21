@@ -149,7 +149,6 @@ function toPublicUser(rec: StoredUserRecord): AuthUser {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
-    if (isFirebaseConfigured) return null;
     try {
       const raw = localStorage.getItem(SESSION_STORAGE_KEY);
       if (raw) {
@@ -167,7 +166,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null;
   });
 
-  const [authLoading, setAuthLoading] = useState<boolean>(isFirebaseConfigured);
+  const [authLoading, setAuthLoading] = useState<boolean>(() => {
+    try {
+      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AuthUser;
+        if (parsed && parsed.email) return false;
+      }
+    } catch {
+      // Ignore
+    }
+    return isFirebaseConfigured;
+  });
 
   // Subscribe to Firebase Auth state when cloud auth is active
   useEffect(() => {
@@ -180,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(firebaseAuth, async (fbUser) => {
       if (!fbUser || !fbUser.email) {
         setUser(null);
+        persistLocalSession(null);
         setAuthLoading(false);
         return;
       }
@@ -195,25 +206,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: fbUser.metadata.creationTime || new Date().toISOString(),
       };
 
+      // Set user immediately and unblock authLoading so refresh is instant (0ms delay)
+      setUser(fallbackProfile);
+      persistLocalSession(fallbackProfile);
+      setAuthLoading(false);
+
       try {
         const snap = await getDoc(doc(db, 'users', fbUser.uid));
         if (snap.exists()) {
           const data = snap.data();
-          setUser({
+          const enriched: AuthUser = {
             id: fbUser.uid,
             fullName: String(data.fullName || fallbackProfile.fullName),
             email: emailLower,
             phone: String(data.phone || ''),
             role: isMaster ? 'admin' : 'customer',
             createdAt: String(data.createdAt || fallbackProfile.createdAt),
-          });
-        } else {
-          setUser(fallbackProfile);
+          };
+          setUser(enriched);
+          persistLocalSession(enriched);
         }
       } catch {
-        setUser(fallbackProfile);
-      } finally {
-        setAuthLoading(false);
+        // Fallback profile already saved and active
       }
     });
 
